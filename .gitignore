@@ -1,0 +1,7 @@
+.env
+config.env
+subscribers.json
+venv/
+.venv/
+__pycache__/
+*.pyc
