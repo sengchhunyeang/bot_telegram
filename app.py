@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import tempfile
 
 import requests
 from dotenv import load_dotenv
@@ -9,7 +10,14 @@ from flask import Flask, jsonify, request
 load_dotenv("config.env")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SUBSCRIBERS_FILE = os.path.join(BASE_DIR, "subscribers.json")
+# Vercel's filesystem is read-only outside /tmp, and /tmp itself is not
+# guaranteed to persist between invocations - subscriber storage there is
+# best-effort. The group chat reminder (TELEGRAM_GROUP_CHAT_ID) is unaffected.
+SUBSCRIBERS_FILE = (
+    os.path.join(tempfile.gettempdir(), "subscribers.json")
+    if os.getenv("VERCEL")
+    else os.path.join(BASE_DIR, "subscribers.json")
+)
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_GROUP_CHAT_ID")
@@ -49,8 +57,11 @@ def load_subscribers() -> dict:
 def add_subscriber(chat_id, username) -> None:
     subscribers = load_subscribers()
     subscribers[str(chat_id)] = username
-    with open(SUBSCRIBERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(subscribers, f, indent=2)
+    try:
+        with open(SUBSCRIBERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(subscribers, f, indent=2)
+    except OSError:
+        logger.warning("Could not persist subscriber %s (read-only filesystem?).", chat_id)
 
 
 def build_reminder_message() -> str:
